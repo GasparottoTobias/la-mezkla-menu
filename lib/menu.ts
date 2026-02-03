@@ -7,12 +7,14 @@ export type Product = {
   price: number;
   image_url: string | null;
   order_index: number;
+  is_active: boolean;
 };
 
 export type CategoryWithProducts = {
   id: string;
   name: string;
   order_index: number;
+  is_active: boolean;
   products: Product[];
 };
 
@@ -23,16 +25,18 @@ export async function getMenu(): Promise<CategoryWithProducts[]> {
       id,
       name,
       order_index,
+      is_active,
       products (
         id,
         name,
         description,
         price,
         image_url,
-        order_index
+        order_index,
+        is_active
       )
     `)
-    .eq("products.is_active", true)
+    .eq("is_active", true)
     .order("order_index", { ascending: true })
     .order("order_index", { foreignTable: "products", ascending: true });
 
@@ -41,5 +45,10 @@ export async function getMenu(): Promise<CategoryWithProducts[]> {
     throw new Error("Error cargando el menú");
   }
 
-  return data as CategoryWithProducts[];
+  return (data ?? [])
+    .map((category) => ({
+      ...category,
+      products: category.products.filter((p) => p.is_active),
+    }))
+    .filter((category) => category.products.length > 0);
 }

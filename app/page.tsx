@@ -14,7 +14,10 @@ export default async function Page() {
           <ul>
             {category.products.map((product) => (
               <li key={product.id}>
-                {product.name} — ${product.price}
+                <strong>{product.name}</strong> — ${product.price}
+                {product.description && (
+                  <p style={{ opacity: 0.8 }}>{product.description}</p>
+                )}
               </li>
             ))}
           </ul>
