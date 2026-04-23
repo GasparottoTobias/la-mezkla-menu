@@ -1,7 +1,7 @@
 import QRCode from "qrcode";
 
 export async function GET() {
-  const url = "https://la-mezkla-menu.vercel.app"; // después cambiamos por tu dominio real
+  const url = "https://la-mezkla-menu.vercel.app"; 
 
   const qr = await QRCode.toDataURL(url);
 
