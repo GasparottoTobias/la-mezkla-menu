@@ -7,6 +7,7 @@ const WA_NUMBER = '543564660528' // ← cambiá por el número real
 export default function CartView({ onBack }: { onBack: () => void }) {
   const { items, updateQty, removeItem, total } = useCart()
   const [name, setName]         = useState('')
+  const [nameError, setNameError] = useState(false)
   const [notes, setNotes]       = useState('')
   const [delivery, setDelivery] = useState<'domicilio' | 'local'>('domicilio')
   const [payment, setPayment]   = useState('Efectivo')
@@ -68,13 +69,18 @@ export default function CartView({ onBack }: { onBack: () => void }) {
   }
 
   async function handleWhatsApp() {
+    if (!name.trim()) {
+      setNameError(true)
+      return
+    }
+    setNameError(false)
     setLoading(true)
     try {
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customerName: name || 'Sin nombre',
+          customerName: name.trim(),
           notes,
           deliveryType: delivery,
           paymentMethod: payment,
@@ -92,7 +98,7 @@ export default function CartView({ onBack }: { onBack: () => void }) {
       const lines = [
         `Nuevo pedido #${orderCode}`,
         '------- CLIENTE -------',
-        `Nombre: ${name || 'Sin nombre'}`,
+        `Nombre: ${name.trim()}`,
         `Medio de Pago: ${payment}`,
         `Envío: ${delivery === 'domicilio' ? 'Envío a domicilio' : 'Retira en local'}`,
         notes ? `Observaciones: ${notes}` : '',
@@ -241,16 +247,28 @@ export default function CartView({ onBack }: { onBack: () => void }) {
           <div style={sectionStyle}>
             <p style={{
               fontSize: '11px', letterSpacing: '0.12em', textTransform: 'uppercase',
-              color: 'var(--color-text-muted)', marginBottom: '10px',
+              color: nameError ? 'var(--color-danger-text)' : 'var(--color-text-muted)',
+              marginBottom: '10px',
             }}>
-              Tus datos
+              Tus datos {nameError && '— ingresá tu nombre para continuar'}
             </p>
             <input
               value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Nombre"
-              style={inputStyle}
+              onChange={e => {
+                setName(e.target.value)
+                if (e.target.value.trim()) setNameError(false)
+              }}
+              placeholder="Nombre *"
+              style={{
+                ...inputStyle,
+                borderColor: nameError ? 'var(--color-danger-text)' : undefined,
+              }}
             />
+            {nameError && (
+              <p style={{ fontSize: '12px', color: 'var(--color-danger-text)', marginTop: '6px' }}>
+                El nombre es obligatorio para continuar.
+              </p>
+            )}
           </div>
 
           {/* Observaciones */}
