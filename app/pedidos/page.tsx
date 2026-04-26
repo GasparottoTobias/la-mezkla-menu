@@ -14,7 +14,7 @@ interface Product {
   price: number
   image_url: string | null
   category_id: string
-  categories: { name: string; is_active: boolean } | null
+  categories: { name: string; is_active: boolean; is_available_for_delivery: boolean } | null
 }
 
 export default function PedidosPage() {
@@ -28,12 +28,16 @@ export default function PedidosPage() {
     async function fetchProducts() {
       const { data, error } = await supabase
         .from('products')
-        .select('*, categories(name, is_active)')
+        .select('*, categories(name, is_active, is_available_for_delivery)')
         .eq('is_active', true)
+        .eq('is_available_for_delivery', true)
         .order('order_index')
 
       if (!error && data) {
-        setProducts(data.filter(p => p.categories?.is_active === true))
+        setProducts(data.filter(p =>
+          p.categories?.is_active === true &&
+          p.categories?.is_available_for_delivery === true
+        ))
       }
       setLoading(false)
     }
