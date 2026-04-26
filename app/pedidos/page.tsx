@@ -14,7 +14,7 @@ interface Product {
   price: number
   image_url: string | null
   category_id: string
-  categories: { name: string } | null
+  categories: { name: string; is_active: boolean } | null
 }
 
 export default function PedidosPage() {
@@ -28,11 +28,13 @@ export default function PedidosPage() {
     async function fetchProducts() {
       const { data, error } = await supabase
         .from('products')
-        .select('*, categories(name)')
+        .select('*, categories(name, is_active)')
         .eq('is_active', true)
         .order('order_index')
 
-      if (!error && data) setProducts(data)
+      if (!error && data) {
+        setProducts(data.filter(p => p.categories?.is_active === true))
+      }
       setLoading(false)
     }
     fetchProducts()
@@ -49,7 +51,6 @@ export default function PedidosPage() {
     setTimeout(() => setToast(null), 2500)
   }
 
-  // Agrupar por categoría
   const byCategory = products.reduce((acc, p) => {
     const cat = p.categories?.name ?? 'Sin categoría'
     if (!acc[cat]) acc[cat] = []
@@ -63,7 +64,6 @@ export default function PedidosPage() {
 
       {screen === 'menu' && (
         <>
-          {/* Header */}
           <div style={{
             position: 'sticky', top: 0, zIndex: 10,
             background: 'var(--color-canvas)',
