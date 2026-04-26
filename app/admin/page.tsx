@@ -3,12 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import AdminSidebar from '@/components/AdminSidebar';
 
 type Category = {
   id: string;
   name: string;
   order_index: number;
   is_active: boolean;
+  is_available_for_delivery: boolean;
 };
 
 type Product = {
@@ -18,6 +20,7 @@ type Product = {
   price: number;
   category_id: string;
   order_index: number;
+  is_available_for_delivery: boolean;
 };
 
 export default function AdminPage() {
@@ -32,12 +35,14 @@ export default function AdminPage() {
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [newProductAvailableForDelivery, setNewProductAvailableForDelivery] = useState(true);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editPrice, setEditPrice] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
+  const [editAvailableForDelivery, setEditAvailableForDelivery] = useState(true);
 
   const [newCategory, setNewCategory] = useState('');
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
@@ -58,14 +63,17 @@ export default function AdminPage() {
   useEffect(() => { loadCategories(); loadProducts(); }, []);
 
   const loadCategories = async () => {
-    const { data } = await supabase.from('categories').select('*').order('order_index');
+    const { data } = await supabase
+      .from('categories')
+      .select('id, name, order_index, is_active, is_available_for_delivery')
+      .order('order_index');
     setCategories(data ?? []);
   };
 
   const loadProducts = async () => {
     const { data } = await supabase
       .from('products')
-      .select('id, name, description, price, category_id, order_index')
+      .select('id, name, description, price, category_id, order_index, is_available_for_delivery')
       .order('category_id').order('order_index');
     setProducts(data ?? []);
   };
@@ -109,15 +117,22 @@ export default function AdminPage() {
     const sameCategory = products.filter(p => p.category_id === categoryId);
     const maxOrder = sameCategory.length > 0 ? Math.max(...sameCategory.map(p => p.order_index)) : 0;
     await supabase.from('products').insert({
-      name, description: description || null,
-      price: Number(price), category_id: categoryId, order_index: maxOrder + 1,
+      name,
+      description: description || null,
+      price: Number(price),
+      category_id: categoryId,
+      order_index: maxOrder + 1,
+      is_available_for_delivery: newProductAvailableForDelivery,
     });
     setName(''); setDescription(''); setPrice(''); setCategoryId('');
+    setNewProductAvailableForDelivery(true);
     loadProducts();
   };
 
   const moveProduct = async (product: Product, direction: 'up' | 'down') => {
-    const sameCategory = products.filter(p => p.category_id === product.category_id).sort((a, b) => a.order_index - b.order_index);
+    const sameCategory = products
+      .filter(p => p.category_id === product.category_id)
+      .sort((a, b) => a.order_index - b.order_index);
     const index = sameCategory.findIndex(p => p.id === product.id);
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= sameCategory.length) return;
@@ -133,13 +148,17 @@ export default function AdminPage() {
     setEditDescription(p.description ?? '');
     setEditPrice(String(p.price));
     setEditCategoryId(p.category_id);
+    setEditAvailableForDelivery(p.is_available_for_delivery);
   };
 
   const saveEdit = async () => {
     if (!editingId) return;
     await supabase.from('products').update({
-      name: editName, description: editDescription || null,
-      price: Number(editPrice), category_id: editCategoryId,
+      name: editName,
+      description: editDescription || null,
+      price: Number(editPrice),
+      category_id: editCategoryId,
+      is_available_for_delivery: editAvailableForDelivery,
     }).eq('id', editingId);
     setEditingId(null);
     loadProducts();
@@ -151,15 +170,9 @@ export default function AdminPage() {
     loadProducts();
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.replace('/login');
-  };
-
   const getCategoryName = (id: string) =>
     categories.find(c => c.id === id)?.name ?? '—';
 
-  /* ── helpers de estilo ── */
   const field: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '0.5rem' };
 
   if (loading) {
@@ -176,27 +189,7 @@ export default function AdminPage() {
     <div className="admin-layout">
 
       {/* ── SIDEBAR ── */}
-      <aside className="sidebar">
-        <span className="sidebar-logo">La Mezkla</span>
-
-        <nav className="sidebar-nav">
-          <span className="sidebar-link active">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25A2.25 2.25 0 0113.5 8.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-            </svg>
-            Dashboard
-          </span>
-        </nav>
-
-        <div style={{ borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '1.25rem' }}>
-          <p style={{ fontSize: '11px', color: 'rgba(245,240,232,0.25)', marginBottom: '0.5rem', letterSpacing: '0.05em' }}>
-            {email}
-          </p>
-          <button className="btn btn-secondary btn-sm btn-full" onClick={handleLogout}>
-            Cerrar sesión
-          </button>
-        </div>
-      </aside>
+      <AdminSidebar email={email} />
 
       {/* ── MAIN ── */}
       <main className="main-content" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -204,7 +197,7 @@ export default function AdminPage() {
         <div className="page-header">
           <div>
             <p className="page-eyebrow">Panel de administración</p>
-            <h1 className="page-title">Dashboard</h1>
+            <h1 className="page-title">Categorías y productos</h1>
           </div>
         </div>
 
@@ -235,6 +228,7 @@ export default function AdminPage() {
                 <tr>
                   <th>Nombre</th>
                   <th>Estado</th>
+                  <th>Disponible para pedidos</th>
                   <th>Orden</th>
                   <th>Acciones</th>
                 </tr>
@@ -267,6 +261,22 @@ export default function AdminPage() {
                       <span className={`badge ${c.is_active ? 'badge-success' : 'badge-neutral'}`}>
                         {c.is_active ? 'Activa' : 'Inactiva'}
                       </span>
+                    </td>
+                    <td>
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={c.is_available_for_delivery}
+                          onChange={async () => {
+                            await supabase
+                              .from('categories')
+                              .update({ is_available_for_delivery: !c.is_available_for_delivery })
+                              .eq('id', c.id);
+                            loadCategories();
+                          }}
+                        />
+                        <span className="slider"></span>
+                      </label>
                     </td>
                     <td className="muted">#{c.order_index}</td>
                     <td>
@@ -345,6 +355,18 @@ export default function AdminPage() {
                 </select>
               </div>
 
+              <div style={field}>
+                <span className="form-label">Disponible para pedidos</span>
+                <label className="switch" style={{ alignSelf: 'flex-start' }}>
+                  <input
+                    type="checkbox"
+                    checked={newProductAvailableForDelivery}
+                    onChange={(e) => setNewProductAvailableForDelivery(e.target.checked)}
+                  />
+                  <span className="slider"></span>
+                </label>
+              </div>
+
               <button type="submit" className="btn btn-primary btn-full" style={{ marginTop: '0.25rem' }}>
                 Crear producto
               </button>
@@ -378,6 +400,7 @@ export default function AdminPage() {
                   <tr>
                     <th>Producto</th>
                     <th>Categoría</th>
+                    <th>Para pedido</th>
                     <th>Precio</th>
                     <th>Acciones</th>
                   </tr>
@@ -386,7 +409,7 @@ export default function AdminPage() {
                   {filteredProducts.map((p) => (
                     <tr key={p.id}>
                       {editingId === p.id ? (
-                        <td colSpan={4}>
+                        <td colSpan={5}>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', padding: '0.5rem 0' }}>
 
                             <div style={field}>
@@ -404,13 +427,25 @@ export default function AdminPage() {
                               <textarea className="form-textarea" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} style={{ minHeight: '60px' }} />
                             </div>
 
-                            <div style={{ ...field, gridColumn: '1 / -1' }}>
+                            <div style={field}>
                               <span className="form-label">Categoría</span>
                               <select className="form-select" value={editCategoryId} onChange={(e) => setEditCategoryId(e.target.value)}>
                                 {categories.map(c => (
                                   <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                               </select>
+                            </div>
+
+                            <div style={field}>
+                              <span className="form-label">Disponible para pedidos</span>
+                              <label className="switch" style={{ alignSelf: 'flex-start', marginTop: '0.25rem' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={editAvailableForDelivery}
+                                  onChange={(e) => setEditAvailableForDelivery(e.target.checked)}
+                                />
+                                <span className="slider"></span>
+                              </label>
                             </div>
 
                             <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '0.5rem' }}>
@@ -429,6 +464,22 @@ export default function AdminPage() {
                             )}
                           </td>
                           <td className="muted">{getCategoryName(p.category_id)}</td>
+                          <td>
+                            <label className="switch">
+                              <input
+                                type="checkbox"
+                                checked={p.is_available_for_delivery}
+                                onChange={async () => {
+                                  await supabase
+                                    .from('products')
+                                    .update({ is_available_for_delivery: !p.is_available_for_delivery })
+                                    .eq('id', p.id);
+                                  loadProducts();
+                                }}
+                              />
+                              <span className="slider"></span>
+                            </label>
+                          </td>
                           <td style={{ color: 'var(--color-gold)', fontWeight: 500 }}>
                             ${p.price.toLocaleString('es-AR')}
                           </td>
@@ -447,7 +498,7 @@ export default function AdminPage() {
 
                   {filteredProducts.length === 0 && (
                     <tr>
-                      <td colSpan={4} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem', fontStyle: 'italic' }}>
+                      <td colSpan={5} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem', fontStyle: 'italic' }}>
                         No hay productos en esta categoría
                       </td>
                     </tr>
