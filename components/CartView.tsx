@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useCart } from '@/store/cartStore'
 
-const WA_NUMBER = '543564660528' // ← cambiá por el número real
+const WA_NUMBER = '543564660528'
 
 export default function CartView({ onBack }: { onBack: () => void }) {
   const { items, updateQty, removeItem, total } = useCart()
@@ -75,13 +75,35 @@ export default function CartView({ onBack }: { onBack: () => void }) {
     }
     setNameError(false)
     setLoading(true)
+
     try {
-      const res = await fetch('/api/orders', {
+      // 1. Construir el mensaje ANTES del await — evita el bloqueo de popups móviles
+      const provisionalCode = Math.random().toString(36).slice(2, 6).toUpperCase()
+
+      const lines = [
+        `Nuevo pedido #${provisionalCode}`,
+        '------- CLIENTE -------',
+        `Nombre: ${name.trim()}`,
+        `Medio de Pago: ${payment}`,
+        `Envío: ${delivery === 'domicilio' ? 'Envío a domicilio' : 'Retira en local'}`,
+        notes.trim() ? `Observaciones: ${notes.trim()}` : null,
+        '------- PEDIDO -------',
+        ...items.map(i =>
+          `${i.quantity} x ${i.category}: ${i.name} = $ ${(i.price * i.quantity).toLocaleString('es-AR')}`
+        ),
+        '..................',
+        `TOTAL: $ ${orderTotal.toLocaleString('es-AR')}`,
+      ].filter(Boolean).join('\n')
+
+      const waUrl = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(lines)}`
+
+      // 2. Guardar en DB en segundo plano (fire & forget)
+      fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerName: name.trim(),
-          notes,
+          notes: notes.trim(),
           deliveryType: delivery,
           paymentMethod: payment,
           items: items.map(i => ({
@@ -92,25 +114,11 @@ export default function CartView({ onBack }: { onBack: () => void }) {
             qty: i.quantity,
           })),
         }),
-      })
-      const { orderCode } = await res.json()
+      }).catch(console.error)
 
-      const lines = [
-        `Nuevo pedido #${orderCode}`,
-        '------- CLIENTE -------',
-        `Nombre: ${name.trim()}`,
-        `Medio de Pago: ${payment}`,
-        `Envío: ${delivery === 'domicilio' ? 'Envío a domicilio' : 'Retira en local'}`,
-        notes ? `Observaciones: ${notes}` : '',
-        '------- PEDIDO -------',
-        ...items.map(i =>
-          `${i.quantity} x ${i.category}: ${i.name} = $ ${(i.price * i.quantity).toLocaleString('es-AR')}`
-        ),
-        '..................',
-        `TOTAL: $ ${orderTotal.toLocaleString('es-AR')}`,
-      ].filter(Boolean).join('\n')
+      // 3. Redirigir — window.location.href nunca es bloqueado por el browser móvil
+      window.location.href = waUrl
 
-      window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(lines)}`, '_blank')
     } finally {
       setLoading(false)
     }
@@ -379,7 +387,7 @@ export default function CartView({ onBack }: { onBack: () => void }) {
                 }
               }}
             >
-              📲 {loading ? 'Guardando...' : 'Pedir por WhatsApp'}
+              📲 {loading ? 'Enviando...' : 'Pedir por WhatsApp'}
             </button>
           </div>
         </>
