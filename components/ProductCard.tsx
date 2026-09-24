@@ -1,5 +1,6 @@
 'use client'
 import { useCart } from '@/store/cartStore'
+import Image from 'next/image'
 
 interface Props {
   product: {
@@ -19,17 +20,18 @@ export default function ProductCard({ product, onAdd }: Props) {
   return (
     <div className="product-card" style={{ margin: '0 0.75rem 0.6rem' }}>
       {product.image_url && (
-        <img src={product.image_url} alt={product.name} className="product-card-image" />
+        <Image src={product.image_url} alt={product.name} className="product-card-image" width={400} height={300} style={{ height: 'auto' }} unoptimized />
       )}
       <div className="product-card-body">
         <p className="product-card-name">{product.name}</p>
         <p className="product-card-meta">{product.description}</p>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
           <span className="product-card-price">
-            $ {product.price.toLocaleString('es-AR')}
+            {product.price > 0 ? '$ ' + product.price.toLocaleString('es-AR') : 'Consultar'}
           </span>
           <button
             onClick={onAdd}
+            disabled={!(product.price > 0)}
             className="btn btn-sm"
             style={inCart ? {
               background: 'var(--color-gold-dim)',
@@ -55,7 +57,7 @@ export default function ProductCard({ product, onAdd }: Props) {
               }
             }}
           >
-            {inCart ? '✓ Agregado' : '+ Agregar'}
+            {!(product.price > 0) ? 'Consultar precio' : inCart ? '✓ Agregado' : '+ Agregar'}
           </button>
         </div>
       </div>

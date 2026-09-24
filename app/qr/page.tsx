@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 
 export default function QRPage() {
   const [qr, setQr] = useState<string>("");
@@ -16,7 +17,7 @@ export default function QRPage() {
       <h1>QR del menú</h1>
 
       {qr ? (
-        <img src={qr} alt="QR Menu" style={{ width: 250 }} />
+        <Image src={qr} alt="QR Menu" width={250} height={250} unoptimized />
       ) : (
         <p>Generando QR...</p>
       )}

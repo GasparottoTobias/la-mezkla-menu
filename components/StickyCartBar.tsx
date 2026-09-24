@@ -1,6 +1,10 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { useCart } from '@/store/cartStore'
+
+const subscribe = () => () => {}
+const clientSnapshot = () => true
+const serverSnapshot = () => false
 
 export default function StickyCartBar({
   onGoToCart, screen
@@ -9,11 +13,7 @@ export default function StickyCartBar({
   screen: 'menu' | 'cart'
 }) {
   const { itemCount, total } = useCart()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useSyncExternalStore(subscribe, clientSnapshot, serverSnapshot)
 
   if (!mounted) return null
 

@@ -97,7 +97,7 @@ export default async function Page() {
                         color: "#f5c542", // color cálido para destacar precio
                       }}
                     >
-                      ${product.price}
+                      {product.price > 0 ? '$' + product.price : 'Consultar'}
                     </span>
                   </div>
 

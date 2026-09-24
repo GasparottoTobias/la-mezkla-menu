@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useCart } from '@/store/cartStore'
 import { supabase } from '@/lib/supabase'
 import ProductCard from '@/components/ProductCard'
@@ -23,6 +23,9 @@ export default function PedidosPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const { addItem } = useCart()
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current) }, [])
 
   useEffect(() => {
     async function fetchProducts() {
@@ -45,6 +48,7 @@ export default function PedidosPage() {
   }, [])
 
   function handleAdd(product: Product) {
+    if (!(product.price > 0)) return
     addItem({
       id: product.id,
       name: product.name,
@@ -52,7 +56,8 @@ export default function PedidosPage() {
       price: product.price,
     })
     setToast(product.name)
-    setTimeout(() => setToast(null), 2500)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 2500)
   }
 
   const byCategory = products.reduce((acc, p) => {

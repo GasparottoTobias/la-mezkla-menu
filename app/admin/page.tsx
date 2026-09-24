@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import AdminSidebar from '@/components/AdminSidebar';
@@ -60,23 +60,27 @@ export default function AdminPage() {
     init();
   }, [router]);
 
-  useEffect(() => { loadCategories(); loadProducts(); }, []);
-
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     const { data } = await supabase
       .from('categories')
       .select('id, name, order_index, is_active, is_available_for_delivery')
       .order('order_index');
     setCategories(data ?? []);
-  };
+  }, []);
 
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     const { data } = await supabase
       .from('products')
       .select('id, name, description, price, category_id, order_index, is_available_for_delivery')
       .order('category_id').order('order_index');
     setProducts(data ?? []);
-  };
+  }, []);
+
+  useEffect(() => {
+    void supabase.auth.getSession().then(({ data }) => {
+      if (data.session) { void loadCategories(); void loadProducts(); }
+    });
+  }, [loadCategories, loadProducts]);
 
   const filteredProducts = filterCategoryId
     ? products.filter((p) => p.category_id === filterCategoryId)
