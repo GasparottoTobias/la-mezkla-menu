@@ -45,7 +45,10 @@ const COLOR_BORDER: [number, number, number] = [58, 54, 48];
 const PAGE_W = 210;
 const PAGE_H = 297;
 const MARGIN_X = 12;
-const MARGIN_BOTTOM = 11;
+// Keep a generous printable-area buffer above the footer. jsPDF's text
+// metrics can differ slightly from the final PDF renderer, particularly on
+// dense columns, so this prevents the last product from entering the footer.
+const MARGIN_BOTTOM = 20;
 const COLUMN_GAP = 8;
 const COLUMNS_PER_PAGE = 2;
 const COLUMN_W = (PAGE_W - MARGIN_X * 2 - COLUMN_GAP) / COLUMNS_PER_PAGE;
