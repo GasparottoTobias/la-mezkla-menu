@@ -77,7 +77,7 @@ const SZ = {
 function planProduct(doc: jsPDF, product: Product): ProductPlan {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(SZ.nameFont);
-  const priceText = '$' + product.price.toLocaleString('es-AR');
+  const priceText = product.price > 0 ? '$' + product.price.toLocaleString('es-AR') : 'Consultar';
   const priceWidth = doc.getTextWidth(priceText);
 
   const firstLineMaxWidth = INNER_W - priceWidth - 2;

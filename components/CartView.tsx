@@ -12,6 +12,7 @@ export default function CartView({ onBack }: { onBack: () => void }) {
   const [delivery, setDelivery] = useState<'domicilio' | 'local'>('domicilio')
   const [payment, setPayment]   = useState('Efectivo')
   const [loading, setLoading]   = useState(false)
+  const [orderError, setOrderError] = useState<string | null>(null)
 
   const orderTotal = total()
 
@@ -69,19 +70,31 @@ export default function CartView({ onBack }: { onBack: () => void }) {
   }
 
   async function handleWhatsApp() {
+    if (loading) return
     if (!name.trim()) {
       setNameError(true)
       return
     }
     setNameError(false)
+    setOrderError(null)
     setLoading(true)
 
     try {
-      // 1. Construir el mensaje ANTES del await — evita el bloqueo de popups móviles
-      const provisionalCode = Math.random().toString(36).slice(2, 6).toUpperCase()
+      // Confirm persistence and current prices before opening WhatsApp.
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: name.trim(), notes: notes.trim(), deliveryType: delivery,
+          paymentMethod: payment,
+          items: items.map(i => ({ productId: i.id, price: i.price, qty: i.quantity })),
+        }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'No se pudo guardar el pedido.')
 
       const lines = [
-        `Nuevo pedido #${provisionalCode}`,
+        `Nuevo pedido #${result.orderCode}`,
         '------- CLIENTE -------',
         `Nombre: ${name.trim()}`,
         `Medio de Pago: ${payment}`,
@@ -97,28 +110,10 @@ export default function CartView({ onBack }: { onBack: () => void }) {
 
       const waUrl = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(lines)}`
 
-      // 2. Guardar en DB en segundo plano (fire & forget)
-      fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerName: name.trim(),
-          notes: notes.trim(),
-          deliveryType: delivery,
-          paymentMethod: payment,
-          items: items.map(i => ({
-            productId: i.id,
-            name: i.name,
-            category: i.category,
-            price: i.price,
-            qty: i.quantity,
-          })),
-        }),
-      }).catch(console.error)
-
-      // 3. Redirigir — window.location.href nunca es bloqueado por el browser móvil
+      // Same-tab navigation also works after awaiting on mobile browsers.
       window.location.href = waUrl
-
+    } catch (error) {
+      setOrderError(error instanceof Error ? error.message : 'No se pudo enviar el pedido.')
     } finally {
       setLoading(false)
     }
@@ -126,6 +121,7 @@ export default function CartView({ onBack }: { onBack: () => void }) {
 
   return (
     <div style={{ background: 'var(--color-canvas)', minHeight: '100dvh' }}>
+      {orderError && <p role="alert" style={{ padding: '1rem', color: 'var(--color-danger-text)' }}>{orderError}</p>}
 
       {/* Header */}
       <div style={{

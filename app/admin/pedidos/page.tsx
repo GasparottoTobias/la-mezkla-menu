@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import AdminSidebar from '@/components/AdminSidebar';
@@ -142,10 +142,8 @@ export default function PedidosPage() {
     init();
   }, [router]);
 
-  useEffect(() => { loadOrders(); }, []);
-
   // ── Carga pedidos pendientes con sus items ──
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     const { data: ordersData, error } = await supabase
       .from('orders')
       .select('id, order_code, created_at, status, customer_name, notes, delivery_type, payment_method, total')
@@ -159,24 +157,30 @@ export default function PedidosPage() {
 
     const { data: itemsData } = await supabase
       .from('order_items')
-      .select('id, order_id, product_id, quantity, unit_price, products(name)')
+      .select('id, order_id, product_id, quantity, unit_price, product_name')
       .in('order_id', orderIds);
 
     const enriched: Order[] = ordersData.map((o) => ({
       ...o,
       items: (itemsData ?? [])
-        .filter((i: any) => i.order_id === o.id)
-        .map((i: any) => ({
+        .filter((i) => i.order_id === o.id)
+        .map((i) => ({
           id: i.id,
           product_id: i.product_id,
           quantity: i.quantity,
           unit_price: i.unit_price,
-          product_name: i.products?.name ?? '—',
+          product_name: i.product_name ?? '—',
         })),
     }));
 
     setOrders(enriched);
-  };
+  }, []);
+
+  useEffect(() => {
+    void supabase.auth.getSession().then(({ data }) => {
+      if (data.session) void loadOrders();
+    });
+  }, [loadOrders]);
 
   // ── Acción del modal ──
   const handleModalConfirm = async () => {

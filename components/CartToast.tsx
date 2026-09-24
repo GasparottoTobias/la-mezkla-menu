@@ -1,18 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
 
 export default function CartToast({ productName }: { productName: string | null }) {
-  const [visible, setVisible] = useState(false)
-
-  useEffect(() => {
-    if (productName) {
-      setVisible(true)
-      const t = setTimeout(() => setVisible(false), 2500)
-      return () => clearTimeout(t)
-    } else {
-      setVisible(false)
-    }
-  }, [productName])
+  const visible = Boolean(productName)
 
   return (
     <div className={`fixed top-16 left-1/2 z-50 -translate-x-1/2 transition-all duration-300 ${

@@ -1,5 +1,5 @@
 begin;
-select plan(10);
+select plan(11);
 
 insert into auth.users (id)
 values
@@ -162,6 +162,13 @@ select ok(
   'administrators can read orders'
 );
 
+reset role;
+set local role service_role;
+select lives_ok(
+  $$insert into public.orders (order_code, customer_name, delivery_type, payment_method, subtotal, total)
+    values ('QA02', 'Cliente QA servidor', 'local', 'Efectivo', 100, 100) returning id$$,
+  'server can create an order and read its id as required by the API'
+);
 reset role;
 select * from finish();
 rollback;

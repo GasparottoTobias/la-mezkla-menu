@@ -151,7 +151,6 @@ export default function DashboardPage() {
   }, [router]);
 
   const load = useCallback(async () => {
-    setDataLoading(true);
     const from = getFromDate(range);
     let q = supabase.from('orders').select('*').order('created_at', { ascending: false });
     if (from) q = q.gte('created_at', from);
@@ -169,7 +168,11 @@ export default function DashboardPage() {
     setDataLoading(false);
   }, [range]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    void supabase.auth.getSession().then(({ data }) => {
+      if (data.session) void load();
+    });
+  }, [load]);
 
   if (loading) {
     return (
@@ -232,7 +235,6 @@ export default function DashboardPage() {
   }));
 
   const maxDayTotal = Math.max(...dayData.map(d => d.total), 1);
-  const maxDayOrders = Math.max(...dayData.map(d => d.orders), 1);
 
   // Día más activo
   const busiestDay = dayData.reduce((a, b) => b.orders > a.orders ? b : a, dayData[0]);
@@ -246,7 +248,6 @@ export default function DashboardPage() {
     byHour[h] += 1;
   });
   const hourData = Array.from({ length: 24 }, (_, h) => ({ hour: h, orders: byHour[h] }));
-  const maxHourOrders = Math.max(...hourData.map(h => h.orders), 1);
   const peakHour = hourData.reduce((a, b) => b.orders > a.orders ? b : a, hourData[0]);
 
   // Pico por día de semana + hora (heatmap data: 7 días x 24 horas)
@@ -410,12 +411,12 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', gap: 4, background: 'rgba(245,240,232,0.03)', borderRadius: 24, padding: 3, border: '0.5px solid rgba(245,240,232,0.07)' }}>
                 {(['7d', '30d', '90d', 'all'] as Range[]).map(r => (
-                  <button key={r} className={`range-btn${range === r ? ' active' : ''}`} onClick={() => setRange(r)}>
+                  <button key={r} className={`range-btn${range === r ? ' active' : ''}`} onClick={() => { if (range !== r) { setDataLoading(true); setRange(r); } }}>
                     {r === 'all' ? 'Todo' : r === '7d' ? '7 días' : r === '30d' ? '30 días' : '3 meses'}
                   </button>
                 ))}
               </div>
-              <button className="refresh-btn" onClick={load}><span>↻</span> Actualizar</button>
+              <button className="refresh-btn" onClick={() => { setDataLoading(true); void load(); }}><span>↻</span> Actualizar</button>
             </div>
           </div>
 
