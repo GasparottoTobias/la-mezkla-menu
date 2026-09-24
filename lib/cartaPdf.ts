@@ -32,6 +32,10 @@ export type CartaPdfResult = {
   pageCount: number;
 };
 
+export function cartaPdfFileName(fileDateSuffix: string) {
+  return 'Carta-' + fileDateSuffix + '.pdf';
+}
+
 // ─── Paleta (igual al panel admin) ─────────────────────────────────────────
 
 const COLOR_CANVAS: [number, number, number] = [14, 13, 11]; // #0e0d0b
@@ -412,7 +416,7 @@ export async function createCartaPdf(
 
   return {
     blob: doc.output('blob'),
-    fileName: 'carta-' + fileDateSuffix + '.pdf',
+    fileName: cartaPdfFileName(fileDateSuffix),
     pageCount,
   };
 }

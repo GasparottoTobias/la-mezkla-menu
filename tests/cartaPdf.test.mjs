@@ -29,6 +29,7 @@ function makeMenu(productCount) {
 test('always creates a two-page PDF for a small menu', async () => {
   const result = await createCartaPdf(makeMenu(1), 'qa', null)
   assert.equal(result.pageCount, 2)
+  assert.equal(result.fileName, 'Carta-qa.pdf')
   assert.ok(result.blob.size > 0)
 })
 
