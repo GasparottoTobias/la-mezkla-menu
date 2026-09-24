@@ -36,13 +36,13 @@ export function cartaPdfFileName(fileDateSuffix: string) {
   return 'Carta-' + fileDateSuffix + '.pdf';
 }
 
-// ─── Paleta (igual al panel admin) ─────────────────────────────────────────
+// ─── Paleta exclusiva del PDF: fondo blanco y bajo consumo de tinta ────────
 
-const COLOR_CANVAS: [number, number, number] = [14, 13, 11]; // #0e0d0b
-const COLOR_GOLD: [number, number, number] = [197, 147, 79]; // #c5934f
-const COLOR_TEXT: [number, number, number] = [245, 240, 232]; // #f5f0e8
-const COLOR_TEXT_SECONDARY: [number, number, number] = [172, 166, 156];
-const COLOR_BORDER: [number, number, number] = [58, 54, 48];
+const COLOR_CANVAS: [number, number, number] = [255, 255, 255]; // #ffffff
+const COLOR_ACCENT: [number, number, number] = [47, 62, 80]; // #2f3e50 · azul tinta
+const COLOR_TEXT: [number, number, number] = [22, 25, 29]; // #16191d
+const COLOR_TEXT_SECONDARY: [number, number, number] = [79, 84, 91]; // #4f545b
+const COLOR_BORDER: [number, number, number] = [216, 219, 223]; // #d8dbdf
 
 // ─── Layout base (mm) ───────────────────────────────────────────────────────
 
@@ -275,10 +275,10 @@ function drawHeaderFirstPage(doc: jsPDF, logoDataUrl: string | null) {
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.setTextColor(...COLOR_GOLD);
+  doc.setTextColor(...COLOR_ACCENT);
   doc.text('C A R T A', PAGE_W / 2, 29, { align: 'center' });
 
-  doc.setDrawColor(...COLOR_GOLD);
+  doc.setDrawColor(...COLOR_ACCENT);
   doc.setLineWidth(0.3);
   doc.line(PAGE_W / 2 - 15, 31.5, PAGE_W / 2 + 15, 31.5);
 }
@@ -289,7 +289,7 @@ function drawHeaderContinuationPage(doc: jsPDF) {
   doc.setTextColor(...COLOR_TEXT);
   doc.text('La Mezkla', PAGE_W / 2, 9, { align: 'center' });
 
-  doc.setDrawColor(...COLOR_GOLD);
+  doc.setDrawColor(...COLOR_ACCENT);
   doc.setLineWidth(0.25);
   doc.line(PAGE_W / 2 - 11, 11.5, PAGE_W / 2 + 11, 11.5);
 }
@@ -318,7 +318,7 @@ function drawColumn(
 
       doc.setFont('times', 'bold');
       doc.setFontSize(item.continued ? sz.categoryFont - 1 * sz.nameFont / BASE_SZ.nameFont : sz.categoryFont);
-      doc.setTextColor(...COLOR_GOLD);
+      doc.setTextColor(...COLOR_ACCENT);
       doc.text(label, x, baselineY);
 
       doc.setDrawColor(...COLOR_BORDER);
@@ -340,7 +340,7 @@ function drawColumn(
       doc.setTextColor(...COLOR_TEXT);
       doc.text(line, x, baseline);
       if (index === 0 && !plan.priceOnOwnLine) {
-        doc.setTextColor(...COLOR_GOLD);
+        doc.setTextColor(...COLOR_ACCENT);
         doc.text(plan.priceText, x + INNER_W, baseline, { align: 'right' });
       }
       cursorY += sz.nameLineH;
@@ -348,7 +348,7 @@ function drawColumn(
 
     if (plan.priceOnOwnLine) {
       const baseline = cursorY + sz.priceLineH * sz.baselineFactor;
-      doc.setTextColor(...COLOR_GOLD);
+      doc.setTextColor(...COLOR_ACCENT);
       doc.text(plan.priceText, x + INNER_W, baseline, { align: 'right' });
       cursorY += sz.priceLineH;
     }
@@ -375,12 +375,45 @@ async function loadLogoAsDataUrl(): Promise<string | null> {
     const response = await fetch('/logo.png');
     if (!response.ok) return null;
     const blob = await response.blob();
-    return await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    const objectUrl = URL.createObjectURL(blob);
+
+    try {
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const loadedImage = new Image();
+        loadedImage.onload = () => resolve(loadedImage);
+        loadedImage.onerror = reject;
+        loadedImage.src = objectUrl;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d');
+      if (!context) return null;
+
+      // El logo original está preparado para fondo oscuro: el dibujo es blanco
+      // y también contiene píxeles negros. Conservamos la luminosidad del dibujo
+      // como transparencia y lo teñimos de azul tinta para el fondo blanco.
+      context.drawImage(image, 0, 0);
+      const logoPixels = context.getImageData(0, 0, canvas.width, canvas.height);
+      for (let index = 0; index < logoPixels.data.length; index += 4) {
+        const luminance =
+          logoPixels.data[index] * 0.2126 +
+          logoPixels.data[index + 1] * 0.7152 +
+          logoPixels.data[index + 2] * 0.0722;
+        logoPixels.data[index] = COLOR_ACCENT[0];
+        logoPixels.data[index + 1] = COLOR_ACCENT[1];
+        logoPixels.data[index + 2] = COLOR_ACCENT[2];
+        logoPixels.data[index + 3] = Math.round(
+          logoPixels.data[index + 3] * (luminance / 255)
+        );
+      }
+      context.putImageData(logoPixels, 0, 0);
+
+      return canvas.toDataURL('image/png');
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
   } catch {
     return null;
   }
