@@ -45,9 +45,14 @@ const COLOR_BORDER: [number, number, number] = [58, 54, 48];
 const PAGE_W = 210;
 const PAGE_H = 297;
 const MARGIN_X = 12;
-const MARGIN_BOTTOM = 11;
+// Keep a generous printable-area buffer above the footer. jsPDF's text
+// metrics can differ slightly from the final PDF renderer, particularly on
+// dense columns, so this prevents the last product from entering the footer.
+const MARGIN_BOTTOM = 16;
 const COLUMN_GAP = 8;
 const COLUMNS_PER_PAGE = 2;
+const TARGET_PAGE_COUNT = 2;
+const MAX_COLUMNS = COLUMNS_PER_PAGE * TARGET_PAGE_COUNT;
 const COLUMN_W = (PAGE_W - MARGIN_X * 2 - COLUMN_GAP) / COLUMNS_PER_PAGE;
 const INNER_W = COLUMN_W - 2;
 
@@ -56,7 +61,7 @@ const HEADER_TOP_CONTINUATION_PAGE = 15;
 
 const LOGO_RATIO = 578 / 1070;
 
-const SZ = {
+const BASE_SZ = {
   categoryFont: 11.5,
   categoryBlockH: 6.4,
   categoryBaselineOffset: 4,
@@ -72,11 +77,29 @@ const SZ = {
   baselineFactor: 0.74,
 };
 
+type LayoutMetrics = typeof BASE_SZ;
+
+function scaleMetrics(scale: number): LayoutMetrics {
+  return {
+    categoryFont: BASE_SZ.categoryFont * scale,
+    categoryBlockH: BASE_SZ.categoryBlockH * scale,
+    categoryBaselineOffset: BASE_SZ.categoryBaselineOffset * scale,
+    categoryDividerOffset: BASE_SZ.categoryDividerOffset * scale,
+    nameFont: BASE_SZ.nameFont * scale,
+    nameLineH: BASE_SZ.nameLineH * scale,
+    priceLineH: BASE_SZ.priceLineH * scale,
+    descFont: BASE_SZ.descFont * scale,
+    descLineH: BASE_SZ.descLineH * scale,
+    gapAfterProduct: BASE_SZ.gapAfterProduct * scale,
+    baselineFactor: BASE_SZ.baselineFactor,
+  };
+}
+
 // ─── Medición y paginación ─────────────────────────────────────────────────
 
-function planProduct(doc: jsPDF, product: Product): ProductPlan {
+function planProduct(doc: jsPDF, product: Product, sz: LayoutMetrics): ProductPlan {
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(SZ.nameFont);
+  doc.setFontSize(sz.nameFont);
   const priceText = product.price > 0 ? '$' + product.price.toLocaleString('es-AR') : 'Consultar';
   const priceWidth = doc.getTextWidth(priceText);
 
@@ -95,7 +118,7 @@ function planProduct(doc: jsPDF, product: Product): ProductPlan {
   }
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(SZ.descFont);
+  doc.setFontSize(sz.descFont);
   const descLines: string[] = product.description
     ? doc.splitTextToSize(product.description, INNER_W)
     : [];
@@ -103,11 +126,11 @@ function planProduct(doc: jsPDF, product: Product): ProductPlan {
   return { nameLines, priceText, priceOnOwnLine, descLines };
 }
 
-function heightOfProduct(plan: ProductPlan): number {
-  let height = plan.nameLines.length * SZ.nameLineH;
-  if (plan.priceOnOwnLine) height += SZ.priceLineH;
-  height += plan.descLines.length * SZ.descLineH;
-  height += SZ.gapAfterProduct;
+function heightOfProduct(plan: ProductPlan, sz: LayoutMetrics): number {
+  let height = plan.nameLines.length * sz.nameLineH;
+  if (plan.priceOnOwnLine) height += sz.priceLineH;
+  height += plan.descLines.length * sz.descLineH;
+  height += sz.gapAfterProduct;
   return height;
 }
 
@@ -125,7 +148,11 @@ function columnHeight(columnIndex: number): number {
  * necesarias. Cuando una categoría continúa en otra columna, repite su título
  * para que ningún producto quede visualmente huérfano.
  */
-function paginateIntoColumns(doc: jsPDF, menu: CategoryWithProducts[]): MeasuredBlock[][] {
+function paginateIntoColumns(
+  doc: jsPDF,
+  menu: CategoryWithProducts[],
+  sz: LayoutMetrics
+): MeasuredBlock[][] {
   const columns: MeasuredBlock[][] = [[]];
   const usedHeights: number[] = [0];
   let columnIndex = 0;
@@ -145,15 +172,15 @@ function paginateIntoColumns(doc: jsPDF, menu: CategoryWithProducts[]): Measured
     if (category.products.length === 0) continue;
 
     const productBlocks: MeasuredBlock[] = category.products.map((product) => {
-      const plan = planProduct(doc, product);
-      return { kind: 'product', product, plan, height: heightOfProduct(plan) };
+      const plan = planProduct(doc, product, sz);
+      return { kind: 'product', product, plan, height: heightOfProduct(plan, sz) };
     });
 
     const categoryBlock: MeasuredBlock = {
       kind: 'category',
       name: category.name,
       continued: false,
-      height: SZ.categoryBlockH,
+      height: sz.categoryBlockH,
     };
 
     const firstProduct = productBlocks[0];
@@ -176,7 +203,7 @@ function paginateIntoColumns(doc: jsPDF, menu: CategoryWithProducts[]): Measured
           kind: 'category',
           name: category.name,
           continued: true,
-          height: SZ.categoryBlockH,
+          height: sz.categoryBlockH,
         });
       }
 
@@ -185,6 +212,42 @@ function paginateIntoColumns(doc: jsPDF, menu: CategoryWithProducts[]): Measured
   }
 
   return columns;
+}
+
+function fitMenuToTwoPages(doc: jsPDF, menu: CategoryWithProducts[]) {
+  let fittingScale = 1;
+  let metrics = scaleMetrics(fittingScale);
+  let columns = paginateIntoColumns(doc, menu, metrics);
+
+  // Reduce proportionally until all content fits on the front and back of one
+  // A4 sheet. Then recover the largest fitting size with a binary search so
+  // the menu remains as readable as the current catalog allows.
+  while (columns.length > MAX_COLUMNS && fittingScale > 0.02) {
+    fittingScale *= 0.9;
+    metrics = scaleMetrics(fittingScale);
+    columns = paginateIntoColumns(doc, menu, metrics);
+  }
+
+  if (columns.length > MAX_COLUMNS) {
+    throw new Error('La carta es demasiado extensa para ajustarla a dos páginas.');
+  }
+
+  let low = fittingScale;
+  let high = Math.min(1, fittingScale / 0.9);
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const candidate = (low + high) / 2;
+    const candidateMetrics = scaleMetrics(candidate);
+    const candidateColumns = paginateIntoColumns(doc, menu, candidateMetrics);
+    if (candidateColumns.length <= MAX_COLUMNS) {
+      low = candidate;
+      metrics = candidateMetrics;
+      columns = candidateColumns;
+    } else {
+      high = candidate;
+    }
+  }
+
+  return { columns, metrics };
 }
 
 // ─── Dibujo ─────────────────────────────────────────────────────────────────
@@ -235,22 +298,28 @@ function drawFooter(doc: jsPDF, pageNumber: number, totalPages: number) {
   doc.text(pageNumber + '/' + totalPages, PAGE_W - MARGIN_X, PAGE_H - 6, { align: 'right' });
 }
 
-function drawColumn(doc: jsPDF, items: MeasuredBlock[], x: number, topY: number) {
+function drawColumn(
+  doc: jsPDF,
+  items: MeasuredBlock[],
+  x: number,
+  topY: number,
+  sz: LayoutMetrics
+) {
   let y = topY;
 
   for (const item of items) {
     if (item.kind === 'category') {
-      const baselineY = y + SZ.categoryBaselineOffset;
+      const baselineY = y + sz.categoryBaselineOffset;
       const label = item.continued ? item.name + ' · continuación' : item.name;
 
       doc.setFont('times', 'bold');
-      doc.setFontSize(item.continued ? SZ.categoryFont - 1 : SZ.categoryFont);
+      doc.setFontSize(item.continued ? sz.categoryFont - 1 * sz.nameFont / BASE_SZ.nameFont : sz.categoryFont);
       doc.setTextColor(...COLOR_GOLD);
       doc.text(label, x, baselineY);
 
       doc.setDrawColor(...COLOR_BORDER);
       doc.setLineWidth(0.2);
-      doc.line(x, baselineY + SZ.categoryDividerOffset, x + INNER_W, baselineY + SZ.categoryDividerOffset);
+      doc.line(x, baselineY + sz.categoryDividerOffset, x + INNER_W, baselineY + sz.categoryDividerOffset);
 
       y += item.height;
       continue;
@@ -258,36 +327,36 @@ function drawColumn(doc: jsPDF, items: MeasuredBlock[], x: number, topY: number)
 
     const { plan } = item;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(SZ.nameFont);
+    doc.setFontSize(sz.nameFont);
 
     let cursorY = y;
 
     plan.nameLines.forEach((line, index) => {
-      const baseline = cursorY + SZ.nameLineH * SZ.baselineFactor;
+      const baseline = cursorY + sz.nameLineH * sz.baselineFactor;
       doc.setTextColor(...COLOR_TEXT);
       doc.text(line, x, baseline);
       if (index === 0 && !plan.priceOnOwnLine) {
         doc.setTextColor(...COLOR_GOLD);
         doc.text(plan.priceText, x + INNER_W, baseline, { align: 'right' });
       }
-      cursorY += SZ.nameLineH;
+      cursorY += sz.nameLineH;
     });
 
     if (plan.priceOnOwnLine) {
-      const baseline = cursorY + SZ.priceLineH * SZ.baselineFactor;
+      const baseline = cursorY + sz.priceLineH * sz.baselineFactor;
       doc.setTextColor(...COLOR_GOLD);
       doc.text(plan.priceText, x + INNER_W, baseline, { align: 'right' });
-      cursorY += SZ.priceLineH;
+      cursorY += sz.priceLineH;
     }
 
     if (plan.descLines.length > 0) {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(SZ.descFont);
+      doc.setFontSize(sz.descFont);
       doc.setTextColor(...COLOR_TEXT_SECONDARY);
       for (const line of plan.descLines) {
-        const baseline = cursorY + SZ.descLineH * SZ.baselineFactor;
+        const baseline = cursorY + sz.descLineH * sz.baselineFactor;
         doc.text(line, x, baseline);
-        cursorY += SZ.descLineH;
+        cursorY += sz.descLineH;
       }
     }
 
@@ -322,8 +391,8 @@ export async function createCartaPdf(
   const logoDataUrl = logoDataUrlOverride === undefined
     ? await loadLogoAsDataUrl()
     : logoDataUrlOverride;
-  const columns = paginateIntoColumns(doc, menu);
-  const pageCount = Math.max(1, Math.ceil(columns.length / COLUMNS_PER_PAGE));
+  const { columns, metrics } = fitMenuToTwoPages(doc, menu);
+  const pageCount = TARGET_PAGE_COUNT;
   const columnX = [0, 1].map((index) => MARGIN_X + index * (COLUMN_W + COLUMN_GAP));
 
   for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
@@ -335,7 +404,7 @@ export async function createCartaPdf(
 
     for (let pageColumn = 0; pageColumn < COLUMNS_PER_PAGE; pageColumn += 1) {
       const columnIndex = pageIndex * COLUMNS_PER_PAGE + pageColumn;
-      drawColumn(doc, columns[columnIndex] ?? [], columnX[pageColumn], columnTop(columnIndex));
+      drawColumn(doc, columns[columnIndex] ?? [], columnX[pageColumn], columnTop(columnIndex), metrics);
     }
 
     drawFooter(doc, pageIndex + 1, pageCount);
