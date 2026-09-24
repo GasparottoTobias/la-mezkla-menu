@@ -57,6 +57,7 @@ export default function CartaPage() {
   const [generating, setGenerating] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [menu, setMenu] = useState<CategoryWithProducts[]>([]);
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +71,7 @@ export default function CartaPage() {
       if (latestMenu.length === 0) {
         if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
         previewUrlRef.current = null;
+        setPdfBlob(null);
         setPreviewUrl(null);
         setPageCount(0);
         return;
@@ -83,6 +85,7 @@ export default function CartaPage() {
       const nextPreviewUrl = URL.createObjectURL(result.blob);
       const previousPreviewUrl = previewUrlRef.current;
       previewUrlRef.current = nextPreviewUrl;
+      setPdfBlob(result.blob);
       setPreviewUrl(nextPreviewUrl);
       setPageCount(result.pageCount);
 
@@ -145,6 +148,22 @@ export default function CartaPage() {
     }
   };
 
+  const handleDownload = async () => {
+    if (!pdfBlob || generating) return;
+
+    const { cartaPdfFileName } = await import('@/lib/cartaPdf');
+    const downloadUrl = URL.createObjectURL(pdfBlob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = cartaPdfFileName(todayFileSuffix());
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+  };
+
   const totalProducts = menu.reduce(
     (total, category) => total + category.products.length,
     0
@@ -180,24 +199,14 @@ export default function CartaPage() {
               {generating ? 'Actualizando…' : 'Actualizar vista previa'}
             </button>
 
-            <a
+            <button
+              type="button"
               className="btn btn-primary btn-lg"
-              href={previewUrl ?? undefined}
-              download={'carta-' + todayFileSuffix() + '.pdf'}
-              aria-disabled={!previewUrl || generating}
-              onClick={(event) => {
-                if (!previewUrl || generating) {
-                  event.preventDefault();
-                  return;
-                }
-
-                // Calcula la fecha al hacer clic, no al abrir la vista previa.
-                event.currentTarget.download = 'carta-' + todayFileSuffix() + '.pdf';
-              }}
-              style={!previewUrl || generating ? { opacity: 0.5, pointerEvents: 'none' } : undefined}
+              onClick={handleDownload}
+              disabled={!pdfBlob || generating}
             >
               Descargar PDF
-            </a>
+            </button>
           </div>
         </div>
 
@@ -229,7 +238,7 @@ export default function CartaPage() {
           ) : previewUrl ? (
             <iframe
               key={previewUrl}
-              src={previewUrl + '#view=FitH&toolbar=1&navpanes=0'}
+              src={previewUrl + '#view=FitH&toolbar=0&navpanes=0'}
               title="Vista previa de la carta en PDF"
               style={{
                 display: 'block',
